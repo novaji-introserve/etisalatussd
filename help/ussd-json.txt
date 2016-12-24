@@ -1,0 +1,16 @@
+Echoing server response..
+<Buffer 46 00 00 00 6f 00 00 00 00 00 00 00 64 7c 02 00 ff ff ff ff 20 01 32 33 34 38 31 37 34 35 36 38
+Received (begin/continue) response..Fod|���� 2348174568959*372*372#(70)
+Attempting response (80)
+<Buffer 50 00 00 00 70 00 00 00 00 00 00 00 01 7c 02 00 29 ff ff ff 20 01 32 33 34 38 31 37 34 35 36 38
+
+{ commandLength: 'F',
+  commandID: 'o',
+  msisdn: '2348174568959',
+  serviceCode: '372',
+  commandStatus: '\u0000',
+  codeScheme: '\u000f',
+  senderID: '�{\u0001\u0000',
+  receiverID: '����',
+  ussdOpType: '\u0001',
+  content: '*372#' }

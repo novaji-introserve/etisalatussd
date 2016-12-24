@@ -1,0 +1,11 @@
+[Unit]
+Description=Etisalat USSD Service
+
+[Service]
+User=jonathan
+Group=jonathan
+WorkingDirectory=/home/jonathan/etisalatussd
+ExecStart=/usr/bin/node /home/jonathan/etisalatussd/app.js
+
+[Install]
+WantedBy=multi-user.target
