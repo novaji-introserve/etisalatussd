@@ -2,6 +2,8 @@
 require('dotenv').config();
 var net = require('net-socket');
 var format = require('string-format');
+var unirest = require('unirest');
+
 
 var conn = net.connect(parseInt(process.env.PORT), process.env.HOST);
 conn.setKeepAlive(true, 10000);
@@ -31,11 +33,11 @@ function Continue(conn, obj, buf) {
     buffer.writeInt32LE(0, 8);
     /* like problem is from sender ID and receiver ID */
     // SenderID, needs to be receiver ID from begin
-    buf.copy(buffer,12,16,20);
-    
+    buf.copy(buffer, 12, 16, 20);
+
     //buffer.writeInt32LE(0x01000005, 12);
     // Receiver ID
-    buf.copy(buffer,16,12,16);
+    buf.copy(buffer, 16, 12, 16);
     //buffer.writeInt32LE(0x2900AB12, 16, 4);
     // USSD version
     buffer.writeInt32LE(0x20, 20);
@@ -48,7 +50,7 @@ function Continue(conn, obj, buf) {
     // Code Scheme
     buffer.writeUInt8(0x0F, 64);
     // content
-    var msg = Buffer.from(format('Welcome to NIID Service.\nPress 1 to continue',obj.content));
+    var msg = Buffer.from(obj.reply);
     // total return
     var len = buffer.length + msg.length;
     var ret = Buffer.concat([buffer, msg], len);
@@ -74,11 +76,11 @@ function End(conn, obj, buf) {
     buffer.writeInt32LE(0, 8);
     /* like problem is from sender ID and receiver ID */
     // SenderID, needs to be receiver ID from begin
-    buf.copy(buffer,12,16,20);
-    
+    buf.copy(buffer, 12, 16, 20);
+
     //buffer.writeInt32LE(0x01000005, 12);
     // Receiver ID
-    buf.copy(buffer,16,12,16);
+    buf.copy(buffer, 16, 12, 16);
     //buffer.writeInt32LE(0x2900AB12, 16, 4);
     // USSD version
     buffer.writeInt32LE(0x20, 20);
@@ -91,7 +93,7 @@ function End(conn, obj, buf) {
     // Code Scheme
     buffer.writeUInt8(0x0F, 64);
     // content
-    var msg = Buffer.from(format('{0} says:\nThank you for using this service','NIID'));
+    var msg = Buffer.from(obj.reply);
     // total return
     var len = buffer.length + msg.length;
     var ret = Buffer.concat([buffer, msg], len);
@@ -123,36 +125,45 @@ function onConnData(d) {
         // Begin , Continue or End message
         console.log('CommandID(%d)[BEGIN|CONTINUE] %s(%d)', command, d.toString(), len);
 
-        /*
-         var json = {
-         'commandLength': buf.toString('utf8', 0, 1),
-         'commandID': buf.toString('utf8', 4, 5),
-         'msisdn': buf.toString('utf8', 22, 35),
-         'serviceCode': buf.toString('utf8', 44, 47),
-         'commandStatus': buf.toString('utf8', 8, 9),
-         'codeScheme': buf.toString('utf8', 64, 65),
-         'senderID': buf.toString('utf8', 12, 16),
-         'receiverID': buf.toString('utf8', 16, 20),
-         'ussdOpType': buf.toString('utf8', 21, 22),
-         'content': buf.toString('utf8', 65, len)
-         };
-         */
         var obj = {
             commandID: command,
             msisdn: buf.toString('utf8', 22, 35),
             serviceCode: buf.toString('utf8', 44, 47),
             content: buf.toString('utf8', 65, len)
         };
-        console.log(obj);
-        switch (command) {
-            case 111:
-                Continue(conn,obj, buf);
-                break;
-            default:
-                //Reply(conn,obj, buf);
-                 End(conn,obj, buf);
-        }
-        //Reply(conn, json, buf);
+
+        //console.log(obj);
+        /* 
+         * 
+         *  send to dlr and return reply , request and respone are in json
+         */
+        unirest.post(process.env.DLR)
+                .headers({'Accept': 'application/json', 'Content-Type': 'application/json'})
+                .send(obj)
+                .end(function (response) {
+                    //console.log(response.body);
+                    var result = response.body;
+                    /* Either end the session or continue */
+                    switch (result.action) {
+                        case 'Continue':
+                            Continue(conn, result, buf);
+                            break
+                        case 'End':
+                            End(conn, result, buf);
+                            break;
+                        default:
+                            End(conn, result, buf);
+                    }
+                    /*
+                     if (result.action === 'End') {
+                     End(conn, result, buf);
+                     }
+                     else {
+                     Continue(conn, result, buf);
+                     }
+                     //console.log(result.reply);
+                     */
+                });
 
     }
 }
@@ -168,37 +179,6 @@ function onConnError(err) {
     //console.log(err);
     //sys.log("ignoring exception: " + err);
 
-}
-function Begin(conn) {
-    console.log('[BEGIN RESPONSE]');
-    var buffer = Buffer.alloc(65).fill(0);
-    // command length
-    //buffer.writeUInt8(174, 0);
-    //commend id
-    buffer.writeInt32LE(0x0000006F, 4);
-    // command Status
-    buffer.writeInt32LE(0, 8);
-    // SenderID
-    buffer.writeInt32LE(0x01000002, 12);
-    // Receiver ID
-    buffer.writeInt32LE(0xFFFFFFFF, 16, 'hex');
-    // USSD version
-    buffer.writeInt32LE(0x20, 20);
-    // USSD op type
-    buffer.writeInt32LE(0x01, 21);
-    // MSISDN
-    buffer.write('2348174568959', 22);
-    // Service Code
-    buffer.write('*372', 43);
-    // Code Scheme
-    buffer.writeInt8(0x0F, 64);
-    // content
-    var msg = Buffer.from('Welcome to NIID USSD');
-    // total return
-    var len = buffer.length + msg.length;
-    var ret = Buffer.concat([buffer, msg], len);
-    ret.writeInt32LE(len, 0);
-    conn.write(ret);
 }
 
 function Bind(conn) {
@@ -264,7 +244,4 @@ function UnBind(conn) {
     console.log('Buffer length: %d', total_len);
     conn.write(buf);
     console.log('Handshake request sent..');
-}
-function Ping(conn) {
-    conn.write('Alive');
 }
