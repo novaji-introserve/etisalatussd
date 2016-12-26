@@ -154,15 +154,7 @@ function onConnData(d) {
                         default:
                             End(conn, result, buf);
                     }
-                    /*
-                     if (result.action === 'End') {
-                     End(conn, result, buf);
-                     }
-                     else {
-                     Continue(conn, result, buf);
-                     }
-                     //console.log(result.reply);
-                     */
+                  
                 });
 
     }
